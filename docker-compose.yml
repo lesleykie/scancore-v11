@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: scancore-npm
+    restart: unless-stopped
+    ports:
+      - '8080:80'      # HTTP port (non-standard)
+      - '8443:443'     # HTTPS port (non-standard)
+      - '8181:81'      # Admin port (non-standard)
+    volumes:
+      - /docker-data/scancore/nginx/data:/data
+      - /docker-data/scancore/nginx/letsencrypt:/etc/letsencrypt
+    networks:
+      - scancore-network
+
+  nextjs-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: scancore-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgres://scancore:${DB_PASSWORD}@postgres:5432/scancore
+      - JWT_SECRET=${JWT_SECRET}
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - MODULES_DIR=/app/modules
+      - UPLOADS_DIR=/app/public/uploads
+      - CONFIG_DIR=/app/config
+      - I18N_DIR=/app/i18n
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - /docker-data/scancore/modules:/app/modules
+      - /docker-data/scancore/uploads:/app/public/uploads
+      - /docker-data/scancore/config:/app/config
+      - /docker-data/scancore/i18n:/app/i18n
+      - /docker-data/scancore/logs:/app/logs
+    ports:
+      - "3000:3000"     # Direct access port (for development)
+    networks:
+      - scancore-network
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: scancore-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=scancore
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=scancore
+      # Performance tuning for limited resources
+      - POSTGRES_INITDB_ARGS=--data-checksums
+    volumes:
+      - /docker-data/scancore/db:/var/lib/postgresql/data
+      - /docker-data/scancore/db-init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"     # Direct access port (for development)
+    command: postgres -c shared_buffers=64MB -c max_connections=10 -c work_mem=4MB -c maintenance_work_mem=16MB
+    networks:
+      - scancore-network
+
+  adminer:
+    image: adminer:latest
+    container_name: scancore-adminer
+    restart: unless-stopped
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DESIGN=flat
+    ports:
+      - "8888:8080"     # Direct access port (for development)
+    networks:
+      - scancore-network
+    depends_on:
+      - postgres
+
+networks:
+  scancore-network:
+    driver: bridge

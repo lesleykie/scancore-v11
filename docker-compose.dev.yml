@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  nextjs-app-dev:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.dev
+    container_name: scancore-app-dev
+    volumes:
+      - ./app:/app
+      - /app/node_modules
+      - /docker-data/scancore/modules:/app/modules
+      - /docker-data/scancore/uploads:/app/public/uploads
+      - /docker-data/scancore/config:/app/config
+      - /docker-data/scancore/i18n:/app/i18n
+      - /docker-data/scancore/logs:/app/logs
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgres://scancore:${DB_PASSWORD}@postgres:5432/scancore
+      - JWT_SECRET=${JWT_SECRET}
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - MODULES_DIR=/app/modules
+      - UPLOADS_DIR=/app/public/uploads
+      - CONFIG_DIR=/app/config
+      - I18N_DIR=/app/i18n
+      - DEBUG=true
+    ports:
+      - "3000:3000"
+    networks:
+      - scancore-network
+    depends_on:
+      - postgres
+
+  postgres:
+    extends:
+      file: docker-compose.yml
+      service: postgres
+
+  adminer:
+    extends:
+      file: docker-compose.yml
+      service: adminer
+
+networks:
+  scancore-network:
+    driver: bridge

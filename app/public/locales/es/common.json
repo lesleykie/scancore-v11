@@ -1,0 +1,15 @@
+{
+  "welcome": "Bienvenido",
+  "systemStatus": "Estado del Sistema",
+  "connectionStatus": "Estado de Conexión",
+  "online": "En línea",
+  "offline": "Fuera de línea",
+  "userRole": "Rol de Usuario",
+  "quickActions": "Acciones Rápidas",
+  "scanBarcode": "Escanear Código de Barras",
+  "scanBarcodeDesc": "Escanea un código de barras usando la cámara de tu dispositivo",
+  "manageModules": "Gestionar Módulos",
+  "manageModulesDesc": "Instalar, actualizar o eliminar módulos",
+  "systemSettings": "Configuración del Sistema",
+  "systemSettingsDesc": "Configurar ajustes y preferencias del sistema"
+}

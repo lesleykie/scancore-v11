@@ -1,0 +1,19 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Create necessary directories
+RUN mkdir -p modules public/uploads config i18n logs
+
+# Set permissions
+RUN chown -R node:node /app
+
+# Switch to non-root user
+USER node
+
+# Start development server with hot reloading
+CMD ["npm", "run", "dev"]

@@ -1,0 +1,15 @@
+{
+  "welcome": "Welkom",
+  "systemStatus": "Systeemstatus",
+  "connectionStatus": "Verbindingsstatus",
+  "online": "Online",
+  "offline": "Offline",
+  "userRole": "Gebruikersrol",
+  "quickActions": "Snelle acties",
+  "scanBarcode": "Barcode scannen",
+  "scanBarcodeDesc": "Scan een barcode met je apparaatcamera",
+  "manageModules": "Modules beheren",
+  "manageModulesDesc": "Installeer, update of verwijder modules",
+  "systemSettings": "Systeeminstellingen",
+  "systemSettingsDesc": "Configureer systeeminstellingen en voorkeuren"
+}

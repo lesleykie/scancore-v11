@@ -1,0 +1,80 @@
+{
+  "app_name": "ScanCore",
+  "welcome": "Welcome to ScanCore",
+  "language": "Language",
+  "english": "English",
+  "dutch": "Dutch",
+  "dashboard": "Dashboard",
+  "settings": "Settings",
+  "debug": "Debug",
+  "scan": "Scan",
+  "modules": "Modules",
+  "enabled": "Enabled",
+  "disabled": "Disabled",
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "syncing": "Syncing data...",
+    "last_online": "Last online"
+  },
+  "debug_page": {
+    "title": "Debug Information",
+    "system_info": "System Information",
+    "connection_status": "Connection Status",
+    "database_status": "Database Status",
+    "logs": "Application Logs",
+    "clear_logs": "Clear Logs",
+    "no_logs": "No logs available",
+    "storage_usage": "Storage Usage",
+    "pending_sync": "Pending Sync Operations"
+  },
+  "offline": {
+    "message": "You are currently offline",
+    "stored_data": "Data is being stored locally",
+    "will_sync": "Changes will sync when you're back online"
+  },
+  "login": {
+    "title": "Sign in to your account",
+    "email": "Email address",
+    "password": "Password",
+    "sign_in": "Sign in",
+    "signing_in": "Signing in...",
+    "register_link": "Don't have an account? Register",
+    "offline_message": "You are offline. You can only sign in with previously used credentials.",
+    "invalid_credentials": "Invalid email or password"
+  },
+  "modules": {
+    "name": "Name",
+    "version": "Version",
+    "author": "Author",
+    "status": "Status",
+    "actions": "Actions",
+    "enable": "Enable",
+    "disable": "Disable",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "upload": "Upload Module",
+    "uploading": "Uploading...",
+    "refresh": "Refresh",
+    "no_modules": "No modules installed",
+    "upload_success": "Module uploaded successfully",
+    "enabled_success": "Module enabled successfully",
+    "disabled_success": "Module disabled successfully",
+    "toggle_error": "Failed to toggle module status",
+    "invalid_file": "Please select a valid ZIP file",
+    "offline_warning": "You are currently offline. Module installation is not available in offline mode."
+  },
+  "settings": {
+    "app_name": "Application Name",
+    "default_language": "Default Language",
+    "offline_mode": "Enable Offline Mode",
+    "scan_beep": "Play Sound on Scan",
+    "scan_vibrate": "Vibrate on Scan",
+    "scan_history_limit": "Scan History Limit",
+    "save": "Save Settings",
+    "saving": "Saving...",
+    "saved_success": "Settings saved successfully",
+    "saved_error": "Error saving settings",
+    "offline_warning": "You are currently offline. Changes will be saved locally and synced when you're back online."
+  }
+}

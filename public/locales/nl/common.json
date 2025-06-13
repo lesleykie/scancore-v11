@@ -1,0 +1,80 @@
+{
+  "app_name": "ScanCore",
+  "welcome": "Welkom bij ScanCore",
+  "language": "Taal",
+  "english": "Engels",
+  "dutch": "Nederlands",
+  "dashboard": "Dashboard",
+  "settings": "Instellingen",
+  "debug": "Debug",
+  "scan": "Scannen",
+  "modules": "Modules",
+  "enabled": "Ingeschakeld",
+  "disabled": "Uitgeschakeld",
+  "status": {
+    "online": "Online",
+    "offline": "Offline",
+    "syncing": "Data synchroniseren...",
+    "last_online": "Laatst online"
+  },
+  "debug_page": {
+    "title": "Debug Informatie",
+    "system_info": "Systeeminformatie",
+    "connection_status": "Verbindingsstatus",
+    "database_status": "Databasestatus",
+    "logs": "Applicatielogs",
+    "clear_logs": "Logs wissen",
+    "no_logs": "Geen logs beschikbaar",
+    "storage_usage": "Opslaggebruik",
+    "pending_sync": "Wachtende synchronisatieoperaties"
+  },
+  "offline": {
+    "message": "Je bent momenteel offline",
+    "stored_data": "Gegevens worden lokaal opgeslagen",
+    "will_sync": "Wijzigingen worden gesynchroniseerd wanneer je weer online bent"
+  },
+  "login": {
+    "title": "Log in op je account",
+    "email": "E-mailadres",
+    "password": "Wachtwoord",
+    "sign_in": "Inloggen",
+    "signing_in": "Inloggen...",
+    "register_link": "Geen account? Registreren",
+    "offline_message": "Je bent offline. Je kunt alleen inloggen met eerder gebruikte inloggegevens.",
+    "invalid_credentials": "Ongeldig e-mailadres of wachtwoord"
+  },
+  "modules": {
+    "name": "Naam",
+    "version": "Versie",
+    "author": "Auteur",
+    "status": "Status",
+    "actions": "Acties",
+    "enable": "Inschakelen",
+    "disable": "Uitschakelen",
+    "enabled": "Ingeschakeld",
+    "disabled": "Uitgeschakeld",
+    "upload": "Module uploaden",
+    "uploading": "Uploaden...",
+    "refresh": "Vernieuwen",
+    "no_modules": "Geen modules geïnstalleerd",
+    "upload_success": "Module succesvol geüpload",
+    "enabled_success": "Module succesvol ingeschakeld",
+    "disabled_success": "Module succesvol uitgeschakeld",
+    "toggle_error": "Fout bij het wijzigen van de modulestatus",
+    "invalid_file": "Selecteer een geldig ZIP-bestand",
+    "offline_warning": "Je bent momenteel offline. Moduleinstallatie is niet beschikbaar in offline modus."
+  },
+  "settings": {
+    "app_name": "Applicatienaam",
+    "default_language": "Standaardtaal",
+    "offline_mode": "Offline modus inschakelen",
+    "scan_beep": "Geluid afspelen bij scan",
+    "scan_vibrate": "Trillen bij scan",
+    "scan_history_limit": "Limiet scangeschiedenis",
+    "save": "Instellingen opslaan",
+    "saving": "Opslaan...",
+    "saved_success": "Instellingen succesvol opgeslagen",
+    "saved_error": "Fout bij het opslaan van instellingen",
+    "offline_warning": "Je bent momenteel offline. Wijzigingen worden lokaal opgeslagen en gesynchroniseerd wanneer je weer online bent."
+  }
+}

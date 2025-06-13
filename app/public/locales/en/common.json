@@ -1,0 +1,15 @@
+{
+  "welcome": "Welcome",
+  "systemStatus": "System Status",
+  "connectionStatus": "Connection Status",
+  "online": "Online",
+  "offline": "Offline",
+  "userRole": "User Role",
+  "quickActions": "Quick Actions",
+  "scanBarcode": "Scan Barcode",
+  "scanBarcodeDesc": "Scan a barcode using your device camera",
+  "manageModules": "Manage Modules",
+  "manageModulesDesc": "Install, update, or remove modules",
+  "systemSettings": "System Settings",
+  "systemSettingsDesc": "Configure system settings and preferences"
+}
