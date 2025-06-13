@@ -1,0 +1,24 @@
+# Auto-labeling configuration
+"type: feature":
+  - "feature/**"
+"type: bugfix":
+  - "bugfix/**"
+"type: hotfix":
+  - "hotfix/**"
+"type: release":
+  - "release/**"
+"area: frontend":
+  - "app/components/**"
+  - "app/pages/**"
+  - "app/styles/**"
+"area: backend":
+  - "app/lib/**"
+  - "app/pages/api/**"
+"area: database":
+  - "**/*db*"
+  - "**/*sql*"
+"area: docker":
+  - "**/Dockerfile*"
+  - "**/docker-compose*"
+"area: ci/cd":
+  - ".github/**"

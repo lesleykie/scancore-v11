@@ -1,0 +1,9 @@
+# Auto-assign configuration
+addReviewers: true
+addAssignees: false
+reviewers:
+  - maintainer-username # Replace with actual maintainer username
+numberOfReviewers: 1
+skipKeywords:
+  - wip
+  - draft
