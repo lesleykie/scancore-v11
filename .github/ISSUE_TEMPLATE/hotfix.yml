@@ -1,0 +1,34 @@
+name: 🔥 Hotfix
+description: Report a critical issue requiring immediate attention
+title: "[Hotfix] "
+labels: ["hotfix", "priority:high"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Issue Description
+      description: What critical issue needs to be fixed?
+      placeholder: Describe the issue...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What is the impact of this issue?
+      placeholder: Describe the impact...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Go to...
+        2. Click on...
+        3. See error...
+    validations:
+      required: true

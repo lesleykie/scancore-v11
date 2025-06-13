@@ -8,17 +8,19 @@
 "type: release":
   - "release/**"
 "area: frontend":
-  - "app/components/**"
-  - "app/pages/**"
-  - "app/styles/**"
+  - "app/components/**/*"
+  - "app/pages/**/*"
+  - "app/styles/**/*"
 "area: backend":
-  - "app/lib/**"
-  - "app/pages/api/**"
+  - "app/api/**/*"
+  - "app/lib/**/*"
+  - "app/server/**/*"
 "area: database":
-  - "**/*db*"
-  - "**/*sql*"
+  - "app/lib/db.ts"
+  - "app/migrations/**/*"
 "area: docker":
-  - "**/Dockerfile*"
-  - "**/docker-compose*"
+  - "Dockerfile"
+  - "docker-compose.yml"
+  - "docker-compose.*.yml"
 "area: ci/cd":
-  - ".github/**"
+  - ".github/workflows/**/*"

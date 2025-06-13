@@ -1,0 +1,110 @@
+name: 'Analyze Scripts'
+description: 'Analyzes shell scripts in the repository'
+outputs:
+  script-matrix:
+    description: 'JSON matrix of scripts'
+    value: ${{ steps.analyze.outputs.script-matrix }}
+  execution-order:
+    description: 'JSON array of script names in execution order'
+    value: ${{ steps.analyze.outputs.execution-order }}
+  has-scripts:
+    description: 'Whether scripts were found'
+    value: ${{ steps.analyze.outputs.has-scripts }}
+runs:
+  using: "composite"
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq shellcheck
+    
+    - name: Analyze scripts
+      id: analyze
+      shell: bash
+      run: |
+        echo "::group::Script Analysis"
+        
+        # Find all .sh files
+        SCRIPT_FILES=$(find scripts -name "*.sh" -type f 2>/dev/null || echo "")
+        
+        if [ -z "$SCRIPT_FILES" ]; then
+          echo "No shell scripts found in scripts directory"
+          echo "has-scripts=false" >> $GITHUB_OUTPUT
+          echo "script-matrix=[]" >> $GITHUB_OUTPUT
+          echo "execution-order=[]" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "has-scripts=true" >> $GITHUB_OUTPUT
+        echo "Found shell scripts:"
+        echo "$SCRIPT_FILES"
+        
+        # Create script metadata
+        SCRIPT_METADATA="[]"
+        EXECUTION_ORDER="[]"
+        
+        for script in $SCRIPT_FILES; do
+          echo "Analyzing script: $script"
+          
+          # Extract metadata from script comments
+          SCRIPT_NAME=$(basename "$script" .sh)
+          DESCRIPTION=$(grep -m1 "^# Description:" "$script" 2>/dev/null | sed 's/^# Description: *//' || echo "No description")
+          DEPENDENCIES=$(grep "^# Dependencies:" "$script" 2>/dev/null | sed 's/^# Dependencies: *//' || echo "")
+          EXECUTION_ORDER_NUM=$(grep "^# ExecutionOrder:" "$script" 2>/dev/null | sed 's/^# ExecutionOrder: *//' || echo "999")
+          REQUIRES_GITHUB_TOKEN=$(grep -q "GITHUB_TOKEN" "$script" && echo "true" || echo "false")
+          REQUIRES_AWS=$(grep -q "aws\|AWS" "$script" && echo "true" || echo "false")
+          REQUIRES_DOCKER=$(grep -q "docker\|Docker" "$script" && echo "true" || echo "false")
+          
+          # Check if script is executable
+          if [ ! -x "$script" ]; then
+            echo "Making script executable: $script"
+            chmod +x "$script"
+          fi
+          
+          # Run shellcheck
+          SHELLCHECK_RESULT="passed"
+          if ! shellcheck "$script"; then
+            SHELLCHECK_RESULT="failed"
+            echo "::warning::Shellcheck failed for $script"
+          fi
+          
+          # Add to metadata
+          SCRIPT_INFO=$(jq -n \
+            --arg name "$SCRIPT_NAME" \
+            --arg path "$script" \
+            --arg description "$DESCRIPTION" \
+            --arg dependencies "$DEPENDENCIES" \
+            --arg order "$EXECUTION_ORDER_NUM" \
+            --arg github_token "$REQUIRES_GITHUB_TOKEN" \
+            --arg aws "$REQUIRES_AWS" \
+            --arg docker "$REQUIRES_DOCKER" \
+            --arg shellcheck "$SHELLCHECK_RESULT" \
+            '{
+              name: $name,
+              path: $path,
+              description: $description,
+              dependencies: ($dependencies | split(",") | map(select(. != ""))),
+              executionOrder: ($order | tonumber),
+              requiresGithubToken: ($github_token == "true"),
+              requiresAws: ($aws == "true"),
+              requiresDocker: ($docker == "true"),
+              shellcheckResult: $shellcheck
+            }')
+          
+          SCRIPT_METADATA=$(echo "$SCRIPT_METADATA" | jq ". + [$SCRIPT_INFO]")
+        done
+        
+        # Sort scripts by execution order
+        EXECUTION_ORDER=$(echo "$SCRIPT_METADATA" | jq 'sort_by(.executionOrder) | map(.name)')
+        
+        echo "Script metadata:"
+        echo "$SCRIPT_METADATA" | jq '.'
+        
+        echo "Execution order:"
+        echo "$EXECUTION_ORDER" | jq '.'
+        
+        # Set outputs
+        echo "script-matrix=$(echo "$SCRIPT_METADATA" | jq -c '.')" >> $GITHUB_OUTPUT
+        echo "execution-order=$(echo "$EXECUTION_ORDER" | jq -c '.')" >> $GITHUB_OUTPUT
+        echo "::endgroup::"

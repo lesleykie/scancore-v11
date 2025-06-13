@@ -1,9 +1,16 @@
 # Auto-assign configuration
 addReviewers: true
-addAssignees: false
+addAssignees: true
 reviewers:
-  - maintainer-username # Replace with actual maintainer username
+  - octocat
+  # Replace with actual maintainer username
 numberOfReviewers: 1
+
+assignees:
+  - octocat
+  # Add your team members here
+numberOfAssignees: 1
+
 skipKeywords:
   - wip
   - draft

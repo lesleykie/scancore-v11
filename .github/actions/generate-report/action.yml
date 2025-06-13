@@ -1,0 +1,100 @@
+name: 'Generate Execution Report'
+description: 'Generates a comprehensive report of script executions'
+outputs:
+  total-scripts:
+    description: 'Total number of scripts executed'
+    value: ${{ steps.report.outputs.total-scripts }}
+  successful-scripts:
+    description: 'Number of successfully executed scripts'
+    value: ${{ steps.report.outputs.successful-scripts }}
+  failed-scripts:
+    description: 'Number of failed scripts'
+    value: ${{ steps.report.outputs.failed-scripts }}
+runs:
+  using: "composite"
+  steps:
+    - name: Generate comprehensive report
+      id: report
+      shell: bash
+      run: |
+        echo "::group::Generating Execution Report"
+        
+        # Create comprehensive report
+        cat << 'EOF' > execution-report.md
+        # Script Execution Report
+        
+        ## Summary
+        
+        **Execution Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')
+        **Repository:** ${{ github.repository }}
+        **Branch:** ${{ github.ref_name }}
+        **Commit:** ${{ github.sha }}
+        **Triggered by:** ${{ github.actor }}
+        
+        ## Script Execution Results
+        
+        EOF
+        
+        # Process each execution summary
+        TOTAL_SCRIPTS=0
+        SUCCESSFUL_SCRIPTS=0
+        FAILED_SCRIPTS=0
+        TOTAL_DURATION=0
+        TOTAL_ERRORS=0
+        TOTAL_WARNINGS=0
+        
+        for summary_file in execution-summary-*.json; do
+          if [ -f "$summary_file" ]; then
+            TOTAL_SCRIPTS=$((TOTAL_SCRIPTS + 1))
+            
+            SCRIPT_NAME=$(jq -r '.scriptName' "$summary_file")
+            STATUS=$(jq -r '.status' "$summary_file")
+            DURATION=$(jq -r '.duration' "$summary_file")
+            ERROR_COUNT=$(jq -r '.errorCount' "$summary_file")
+            WARNING_COUNT=$(jq -r '.warningCount' "$summary_file")
+            DESCRIPTION=$(jq -r '.description' "$summary_file")
+            
+            if [ "$STATUS" = "success" ]; then
+              SUCCESSFUL_SCRIPTS=$((SUCCESSFUL_SCRIPTS + 1))
+              STATUS_ICON="✅"
+            else
+              FAILED_SCRIPTS=$((FAILED_SCRIPTS + 1))
+              STATUS_ICON="❌"
+            fi
+            
+            TOTAL_DURATION=$((TOTAL_DURATION + DURATION))
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERROR_COUNT))
+            TOTAL_WARNINGS=$((TOTAL_WARNINGS + WARNING_COUNT))
+            
+            cat << EOF >> execution-report.md
+        ### $STATUS_ICON $SCRIPT_NAME
+        
+        - **Status:** $STATUS
+        - **Duration:** ${DURATION}s
+        - **Description:** $DESCRIPTION
+        - **Errors:** $ERROR_COUNT
+        - **Warnings:** $WARNING_COUNT
+        
+        EOF
+          fi
+        done
+        
+        # Add summary statistics
+        sed -i "/## Summary/a\\
+        \\
+        **Total Scripts:** $TOTAL_SCRIPTS\\
+        **Successful:** $SUCCESSFUL_SCRIPTS\\
+        **Failed:** $FAILED_SCRIPTS\\
+        **Total Duration:** ${TOTAL_DURATION}s\\
+        **Total Errors:** $TOTAL_ERRORS\\
+        **Total Warnings:** $TOTAL_WARNINGS\\
+        " execution-report.md
+        
+        echo "total-scripts=$TOTAL_SCRIPTS" >> $GITHUB_OUTPUT
+        echo "successful-scripts=$SUCCESSFUL_SCRIPTS" >> $GITHUB_OUTPUT
+        echo "failed-scripts=$FAILED_SCRIPTS" >> $GITHUB_OUTPUT
+        
+        echo "Execution report generated:"
+        cat execution-report.md
+        
+        echo "::endgroup::"
