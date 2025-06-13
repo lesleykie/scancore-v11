@@ -37,10 +37,10 @@ BRANCH_DESCRIPTION=${2:-}
 log "Issue number: $ISSUE_NUMBER"
 
 # If no description provided, try to get from GitHub API
-if [ -z "$BRANCH_DESCRIPTION" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+if [ -z "$BRANCH_DESCRIPTION" ] && [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
     log "Fetching issue title from GitHub API"
     BRANCH_DESCRIPTION=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-      "https://api.github.com/repos/${GITHUB_REPOSITORY:-}/issues/$ISSUE_NUMBER" | \
+      "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" | \
       jq -r '.title' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g' || echo "hotfix")
 fi
 
@@ -63,7 +63,7 @@ git pull origin main
 
 # Create new branch
 log "Creating hotfix branch"
-git checkout -b $BRANCH_NAME
+git checkout -b "$BRANCH_NAME"
 
 # Create hotfix metadata file
 cat << EOF > HOTFIX.md

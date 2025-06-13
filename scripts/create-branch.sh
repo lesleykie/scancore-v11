@@ -49,10 +49,10 @@ log "Issue number: $ISSUE_NUMBER"
 log "Branch type: $BRANCH_TYPE"
 
 # If no description provided, try to get from GitHub API
-if [ -z "$BRANCH_DESCRIPTION" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+if [ -z "$BRANCH_DESCRIPTION" ] && [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
     log "Fetching issue title from GitHub API"
     BRANCH_DESCRIPTION=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-      "https://api.github.com/repos/${GITHUB_REPOSITORY:-}/issues/$ISSUE_NUMBER" | \
+      "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$ISSUE_NUMBER" | \
       jq -r '.title' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-\|-$//g' || echo "no-description")
 fi
 
@@ -86,12 +86,12 @@ echo -e "${YELLOW}Creating branch ${GREEN}$BRANCH_NAME${YELLOW} from ${GREEN}$BA
 # Checkout base branch
 log "Fetching and checking out base branch"
 git fetch origin
-git checkout $BASE_BRANCH
-git pull origin $BASE_BRANCH
+git checkout "$BASE_BRANCH"
+git pull origin "$BASE_BRANCH"
 
 # Create new branch
 log "Creating new branch"
-git checkout -b $BRANCH_NAME
+git checkout -b "$BRANCH_NAME"
 
 # Create branch metadata file
 cat << EOF > BRANCH.md

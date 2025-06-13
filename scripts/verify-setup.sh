@@ -1,7 +1,21 @@
 #!/bin/bash
 
+# Description: Verify the setup of the ScanCore GitHub automation
+# Dependencies: git,jq
+# ExecutionOrder: 5
+
 echo "🔍 ScanCore GitHub Automation Verification Script"
 echo "================================================"
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Error handling
+set -euo pipefail
+
+log "Starting setup verification"
 
 # Check if we're in a git repository
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
@@ -30,7 +44,7 @@ fi
 echo "✅ .github/workflows directory found"
 
 # Check for required workflow files
-REQUIRED_WORKFLOWS=("ci-cd.yml" "branch-management.yml" "release-automation.yml")
+REQUIRED_WORKFLOWS=("automated-workflow.yml")
 for workflow in "${REQUIRED_WORKFLOWS[@]}"; do
     if [ ! -f "$WORKFLOWS_DIR/$workflow" ]; then
         echo "❌ Missing workflow file: $workflow"
@@ -41,22 +55,40 @@ for workflow in "${REQUIRED_WORKFLOWS[@]}"; do
 done
 
 # Check for package.json in app directory
-if [ ! -f "app/package.json" ]; then
-    echo "❌ app/package.json not found"
-    echo "   Please ensure your Next.js app is in the 'app' directory"
+if [ ! -f "app/package.json" ] && [ ! -f "package.json" ]; then
+    echo "❌ No package.json found in app/ or root directory"
+    echo "   Please ensure your Node.js app has a package.json file"
     exit 1
 fi
 
-echo "✅ app/package.json found"
+if [ -f "app/package.json" ]; then
+    echo "✅ app/package.json found"
+    PACKAGE_JSON_PATH="app/package.json"
+elif [ -f "package.json" ]; then
+    echo "✅ package.json found"
+    PACKAGE_JSON_PATH="package.json"
+fi
 
 # Check for required scripts in package.json
-REQUIRED_SCRIPTS=("lint" "test" "build" "type-check")
+REQUIRED_SCRIPTS=("build")
+OPTIONAL_SCRIPTS=("lint" "test" "type-check")
+
 for script in "${REQUIRED_SCRIPTS[@]}"; do
-    if ! grep -q "\"$script\":" app/package.json; then
-        echo "⚠️  Missing npm script: $script"
+    if ! grep -q "\"$script\":" "$PACKAGE_JSON_PATH"; then
+        echo "❌ Missing required npm script: $script"
         echo "   Add this script to your package.json"
+        exit 1
     else
-        echo "✅ Found npm script: $script"
+        echo "✅ Found required npm script: $script"
+    fi
+done
+
+for script in "${OPTIONAL_SCRIPTS[@]}"; do
+    if ! grep -q "\"$script\":" "$PACKAGE_JSON_PATH"; then
+        echo "⚠️  Missing optional npm script: $script"
+        echo "   Consider adding this script to your package.json"
+    else
+        echo "✅ Found optional npm script: $script"
     fi
 done
 
@@ -65,8 +97,7 @@ CURRENT_BRANCH=$(git branch --show-current)
 echo "📍 Current branch: $CURRENT_BRANCH"
 
 # Check remote origin
-REMOTE_URL=$(git remote get-url origin 2>/dev/null)
-if [ $? -eq 0 ]; then
+if REMOTE_URL=$(git remote get-url origin 2>/dev/null); then
     echo "✅ Remote origin: $REMOTE_URL"
 else
     echo "❌ No remote origin configured"
@@ -74,15 +105,26 @@ else
     exit 1
 fi
 
+# Check for scripts directory
+if [ -d "scripts" ]; then
+    SCRIPT_COUNT=$(find scripts -name "*.sh" | wc -l)
+    echo "✅ Scripts directory found with $SCRIPT_COUNT shell scripts"
+else
+    echo "⚠️  No scripts directory found"
+    echo "   Create a scripts/ directory if you want to use script automation"
+fi
+
 echo ""
-echo "🎉 Setup verification completed!"
+echo "🎉 Setup verification completed successfully!"
 echo ""
 echo "Next steps:"
 echo "1. Commit and push the .github directory to your repository"
 echo "2. Go to your GitHub repository settings and enable Actions"
 echo "3. Set up branch protection rules for 'main' and 'develop'"
-echo "4. Create the required issue labels"
+echo "4. Create the required issue labels (feature, bug, hotfix)"
 echo "5. Test by creating an issue with a 'feature' label"
 echo ""
 echo "Run this command to commit the workflows:"
 echo "git add .github/ && git commit -m 'feat: add automated GitHub workflows' && git push"
+
+log "Script completed successfully"

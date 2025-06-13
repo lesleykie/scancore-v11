@@ -59,16 +59,16 @@ git pull origin develop
 
 # Create new branch
 log "Creating release branch"
-git checkout -b $BRANCH_NAME
+git checkout -b "$BRANCH_NAME"
 
 # Update version in package.json
 log "Updating version in package.json"
 if [ -f "app/package.json" ]; then
     cd app
-    npm version $VERSION --no-git-tag-version
+    npm version "$VERSION" --no-git-tag-version
     cd ..
 elif [ -f "package.json" ]; then
-    npm version $VERSION --no-git-tag-version
+    npm version "$VERSION" --no-git-tag-version
 else
     log "WARNING: No package.json found, skipping version update"
 fi
