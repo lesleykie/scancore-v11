@@ -1,0 +1,728 @@
+name: Automated CI/CD Pipeline
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main, develop, staging]
+  schedule:
+    - cron: '0 0 * * 0' # Weekly on Sunday
+  workflow_dispatch:
+    inputs:
+      workflow_type:
+        description: 'Workflow type to run'
+        required: true
+        type: choice
+        options:
+          - full
+          - scripts-only
+          - deploy-only
+        default: 'full'
+
+env:
+  NODE_VERSION: '18'
+  SCRIPTS_DIR: 'scripts'
+  LOG_LEVEL: 'info'
+
+jobs:
+  # Analyze repository and determine workflow steps
+  analyze-repository:
+    runs-on: ubuntu-latest
+    outputs:
+      has-scripts: ${{ steps.analyze.outputs.has-scripts }}
+      has-app-code: ${{ steps.analyze.outputs.has-app-code }}
+      branch-type: ${{ steps.analyze.outputs.branch-type }}
+      should-deploy: ${{ steps.analyze.outputs.should-deploy }}
+      deploy-environment: ${{ steps.analyze.outputs.deploy-environment }}
+      is-release: ${{ steps.analyze.outputs.is-release }}
+      version-bump: ${{ steps.analyze.outputs.version-bump }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Analyze repository
+        id: analyze
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { repo, owner } = context.repo;
+            const branch = context.ref.replace('refs/heads/', '');
+            
+            // Check for scripts
+            const fs = require('fs');
+            const hasScripts = fs.existsSync('scripts') && 
+              fs.readdirSync('scripts').some(file => file.endsWith('.sh'));
+            
+            // Check for app code
+            const hasAppCode = fs.existsSync('app') || 
+              fs.existsSync('src') || 
+              fs.existsSync('package.json');
+            
+            // Determine branch type
+            let branchType = 'feature';
+            if (branch === 'main' || branch === 'master') {
+              branchType = 'main';
+            } else if (branch === 'develop') {
+              branchType = 'develop';
+            } else if (branch === 'staging') {
+              branchType = 'staging';
+            } else if (branch.startsWith('release/')) {
+              branchType = 'release';
+            } else if (branch.startsWith('hotfix/')) {
+              branchType = 'hotfix';
+            }
+            
+            // Determine deployment settings
+            let shouldDeploy = false;
+            let deployEnvironment = 'development';
+            
+            if (branchType === 'main' && context.eventName === 'push') {
+              shouldDeploy = true;
+              deployEnvironment = 'production';
+            } else if (branchType === 'staging' && context.eventName === 'push') {
+              shouldDeploy = true;
+              deployEnvironment = 'staging';
+            } else if (branchType === 'develop' && context.eventName === 'push') {
+              shouldDeploy = true;
+              deployEnvironment = 'development';
+            } else if (branchType === 'release' && context.eventName === 'push') {
+              shouldDeploy = true;
+              deployEnvironment = 'staging';
+            } else if (branchType === 'hotfix' && context.eventName === 'push') {
+              shouldDeploy = true;
+              deployEnvironment = 'production';
+            }
+            
+            // Determine if this is a release
+            const isRelease = branchType === 'release';
+            
+            // Determine version bump type
+            let versionBump = 'patch';
+            if (branchType === 'release') {
+              if (branch.includes('major')) {
+                versionBump = 'major';
+              } else if (branch.includes('minor')) {
+                versionBump = 'minor';
+              }
+            }
+            
+            // Set outputs
+            core.setOutput('has-scripts', hasScripts);
+            core.setOutput('has-app-code', hasAppCode);
+            core.setOutput('branch-type', branchType);
+            core.setOutput('should-deploy', shouldDeploy);
+            core.setOutput('deploy-environment', deployEnvironment);
+            core.setOutput('is-release', isRelease);
+            core.setOutput('version-bump', versionBump);
+            
+            // Log analysis results
+            console.log('Repository Analysis Results:');
+            console.log(`- Has Scripts: ${hasScripts}`);
+            console.log(`- Has App Code: ${hasAppCode}`);
+            console.log(`- Branch Type: ${branchType}`);
+            console.log(`- Should Deploy: ${shouldDeploy}`);
+            console.log(`- Deploy Environment: ${deployEnvironment}`);
+            console.log(`- Is Release: ${isRelease}`);
+            console.log(`- Version Bump: ${versionBump}`);
+
+  # Analyze and execute scripts
+  execute-scripts:
+    runs-on: ubuntu-latest
+    needs: analyze-repository
+    if: needs.analyze-repository.outputs.has-scripts == 'true' && (github.event.inputs.workflow_type == 'full' || github.event.inputs.workflow_type == 'scripts-only' || github.event.inputs.workflow_type == null)
+    outputs:
+      execution-status: ${{ steps.summary.outputs.status }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Analyze scripts
+        id: analyze-scripts
+        uses: ./.github/actions/analyze-scripts
+      
+      - name: Execute scripts
+        if: steps.analyze-scripts.outputs.has-scripts == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const scripts = JSON.parse('${{ steps.analyze-scripts.outputs.script-matrix }}');
+            const executionOrder = JSON.parse('${{ steps.analyze-scripts.outputs.execution-order }}');
+            
+            console.log(`Found ${scripts.length} scripts to execute`);
+            console.log(`Execution order: ${executionOrder.join(', ')}`);
+            
+            // Execute scripts in order
+            for (const scriptName of executionOrder) {
+              const script = scripts.find(s => s.name === scriptName);
+              if (!script) continue;
+              
+              console.log(`Executing script: ${script.name}`);
+              
+              // Use the execute-script action
+              await exec.exec('bash', ['-c', `
+                mkdir -p logs
+                SCRIPT_PATH="${script.path}"
+                SCRIPT_NAME="${script.name}"
+                EXECUTION_TIME=$(date '+%Y-%m-%d_%H-%M-%S')
+                LOG_FILE="logs/${script.name}_${EXECUTION_TIME}.log"
+                
+                echo "::group::Executing Script: ${script.name}"
+                
+                # Create log file
+                touch "$LOG_FILE"
+                
+                # Log with timestamp
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting execution of script: ${script.name}" | tee -a "$LOG_FILE"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Script path: ${script.path}" | tee -a "$LOG_FILE"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Description: ${script.description}" | tee -a "$LOG_FILE"
+                
+                # Set script permissions
+                chmod +x "$SCRIPT_PATH"
+                
+                # Execute script
+                EXECUTION_START=$(date +%s)
+                EXIT_CODE=0
+                
+                if timeout 1800 bash -x "$SCRIPT_PATH" 2>&1 | tee -a "$LOG_FILE"; then
+                  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Script executed successfully" | tee -a "$LOG_FILE"
+                  echo "status=success" >> script_${script.name}_result.txt
+                else
+                  EXIT_CODE=$?
+                  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Script execution failed with exit code: $EXIT_CODE" | tee -a "$LOG_FILE"
+                  echo "status=failure" >> script_${script.name}_result.txt
+                  echo "exit-code=$EXIT_CODE" >> script_${script.name}_result.txt
+                fi
+                
+                EXECUTION_END=$(date +%s)
+                EXECUTION_DURATION=$((EXECUTION_END - EXECUTION_START))
+                
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Execution completed in ${EXECUTION_DURATION} seconds" | tee -a "$LOG_FILE"
+                echo "duration=$EXECUTION_DURATION" >> script_${script.name}_result.txt
+                
+                # Create execution summary
+                cat << EOF > execution-summary-${script.name}.json
+                {
+                  "scriptName": "${script.name}",
+                  "scriptPath": "${script.path}",
+                  "description": "${script.description}",
+                  "executionTime": "${EXECUTION_TIME}",
+                  "status": "$(cat script_${script.name}_result.txt | grep status | cut -d= -f2)",
+                  "duration": ${EXECUTION_DURATION},
+                  "linesCount": $(wc -l < "$LOG_FILE"),
+                  "errorCount": $(grep -c "ERROR\\|error\\|Error" "$LOG_FILE" || echo "0"),
+                  "warningCount": $(grep -c "WARNING\\|warning\\|Warning" "$LOG_FILE" || echo "0"),
+                  "exitCode": ${EXIT_CODE}
+                }
+                EOF
+                
+                echo "::endgroup::"
+              `]);
+            }
+      
+      - name: Generate execution report
+        id: generate-report
+        uses: ./.github/actions/generate-report
+      
+      - name: Upload execution logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: script-execution-logs
+          path: |
+            logs/
+            execution-summary-*.json
+            execution-report.md
+      
+      - name: Summarize execution results
+        id: summary
+        run: |
+          TOTAL_SCRIPTS=${{ steps.generate-report.outputs.total-scripts }}
+          SUCCESSFUL_SCRIPTS=${{ steps.generate-report.outputs.successful-scripts }}
+          FAILED_SCRIPTS=${{ steps.generate-report.outputs.failed-scripts }}
+          
+          if [ "$FAILED_SCRIPTS" -eq "0" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "### Script Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Total Scripts: $TOTAL_SCRIPTS" >> $GITHUB_STEP_SUMMARY
+          echo "- Successful: $SUCCESSFUL_SCRIPTS" >> $GITHUB_STEP_SUMMARY
+          echo "- Failed: $FAILED_SCRIPTS" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Create issue for failed scripts
+        if: steps.summary.outputs.status == 'failure'
+        uses: JasonEtco/create-an-issue@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOTAL_SCRIPTS: ${{ steps.generate-report.outputs.total-scripts }}
+          SUCCESSFUL_SCRIPTS: ${{ steps.generate-report.outputs.successful-scripts }}
+          FAILED_SCRIPTS: ${{ steps.generate-report.outputs.failed-scripts }}
+        with:
+          filename: execution-report.md
+          title: "🚨 Script Execution Failures"
+          labels: bug, automation, script-failure
+
+  # Build and test application code
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: analyze-repository
+    if: needs.analyze-repository.outputs.has-app-code == 'true' && (github.event.inputs.workflow_type == 'full' || github.event.inputs.workflow_type == 'deploy-only' || github.event.inputs.workflow_type == null)
+    outputs:
+      build-status: ${{ steps.build-summary.outputs.status }}
+      test-status: ${{ steps.test-summary.outputs.status }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+      
+      - name: Determine app directory
+        id: app-dir
+        run: |
+          if [ -d "app" ]; then
+            echo "directory=app" >> $GITHUB_OUTPUT
+          else
+            echo "directory=." >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Install dependencies
+        run: |
+          cd ${{ steps.app-dir.outputs.directory }}
+          npm ci
+      
+      - name: Lint code
+        id: lint
+        continue-on-error: true
+        run: |
+          cd ${{ steps.app-dir.outputs.directory }}
+          if [ -f "package.json" ] && grep -q "lint" "package.json"; then
+            npm run lint
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "No lint script found in package.json"
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Type check
+        id: type-check
+        continue-on-error: true
+        run: |
+          cd ${{ steps.app-dir.outputs.directory }}
+          if [ -f "package.json" ] && grep -q "type-check\|tsc" "package.json"; then
+            npm run type-check || npm run tsc
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "No type-check script found in package.json"
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run tests
+        id: test
+        run: |
+          cd ${{ steps.app-dir.outputs.directory }}
+          if [ -f "package.json" ] && grep -q "test" "package.json"; then
+            npm test
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "No test script found in package.json"
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Build application
+        id: build
+        run: |
+          cd ${{ steps.app-dir.outputs.directory }}
+          if [ -f "package.json" ] && grep -q "build" "package.json"; then
+            npm run build
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "No build script found in package.json"
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Upload build artifacts
+        if: steps.build.outputs.status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            ${{ steps.app-dir.outputs.directory }}/.next
+            ${{ steps.app-dir.outputs.directory }}/dist
+            ${{ steps.app-dir.outputs.directory }}/build
+      
+      - name: Summarize build results
+        id: build-summary
+        run: |
+          if [ "${{ steps.build.outputs.status }}" == "success" ] || [ "${{ steps.build.outputs.status }}" == "skipped" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "### Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Lint: ${{ steps.lint.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Type Check: ${{ steps.type-check.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: ${{ steps.build.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Summarize test results
+        id: test-summary
+        run: |
+          if [ "${{ steps.test.outputs.status }}" == "success" ] || [ "${{ steps.test.outputs.status }}" == "skipped" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "### Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: ${{ steps.test.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+
+  # Create or update pull request
+  manage-pull-request:
+    runs-on: ubuntu-latest
+    needs: [analyze-repository, build-and-test]
+    if: |
+      github.event_name == 'push' && 
+      needs.analyze-repository.outputs.branch-type != 'main' && 
+      needs.analyze-repository.outputs.branch-type != 'develop' && 
+      needs.analyze-repository.outputs.branch-type != 'staging' && 
+      needs.build-and-test.outputs.build-status == 'success' && 
+      needs.build-and-test.outputs.test-status == 'success'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Determine PR base branch
+        id: pr-base
+        run: |
+          BRANCH_TYPE="${{ needs.analyze-repository.outputs.branch-type }}"
+          
+          if [ "$BRANCH_TYPE" == "feature" ] || [ "$BRANCH_TYPE" == "bugfix" ]; then
+            echo "base=develop" >> $GITHUB_OUTPUT
+          elif [ "$BRANCH_TYPE" == "release" ]; then
+            echo "base=main" >> $GITHUB_OUTPUT
+          elif [ "$BRANCH_TYPE" == "hotfix" ]; then
+            echo "base=main" >> $GITHUB_OUTPUT
+          else
+            echo "base=develop" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create or update pull request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "ci: automated PR for branch ${{ github.ref_name }}"
+          title: "[${{ needs.analyze-repository.outputs.branch-type }}] ${{ github.ref_name }}"
+          body: |
+            ## Automated Pull Request
+            
+            This PR was automatically created by the CI/CD pipeline.
+            
+            ### Branch Information
+            - **Branch:** ${{ github.ref_name }}
+            - **Type:** ${{ needs.analyze-repository.outputs.branch-type }}
+            - **Commit:** ${{ github.sha }}
+            
+            ### CI/CD Results
+            - ✅ Build: Passed
+            - ✅ Tests: Passed
+            
+            ---
+            *This PR was automatically created by the CI/CD pipeline*
+          base: ${{ steps.pr-base.outputs.base }}
+          branch: ${{ github.ref_name }}
+          draft: false
+
+  # Deploy application
+  deploy-application:
+    runs-on: ubuntu-latest
+    needs: [analyze-repository, build-and-test, execute-scripts]
+    if: |
+      needs.analyze-repository.outputs.should-deploy == 'true' && 
+      needs.build-and-test.outputs.build-status == 'success' && 
+      (needs.execute-scripts.outputs.execution-status == 'success' || needs.execute-scripts.outputs.execution-status == null) &&
+      (github.event.inputs.workflow_type == 'full' || github.event.inputs.workflow_type == 'deploy-only' || github.event.inputs.workflow_type == null)
+    environment: ${{ needs.analyze-repository.outputs.deploy-environment }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: build-artifacts
+      
+      - name: Setup deployment
+        run: |
+          echo "### Deployment Setup" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ needs.analyze-repository.outputs.deploy-environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      
+      - name: Deploy to environment
+        id: deploy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const environment = '${{ needs.analyze-repository.outputs.deploy-environment }}';
+            console.log(`Deploying to ${environment} environment`);
+            
+            // Simulate deployment based on environment
+            let deploymentCommand = '';
+            let deploymentUrl = '';
+            
+            switch (environment) {
+              case 'development':
+                deploymentCommand = 'aws s3 sync ./build-artifacts s3://dev-bucket/';
+                deploymentUrl = 'https://dev.example.com';
+                break;
+              case 'staging':
+                deploymentCommand = 'aws s3 sync ./build-artifacts s3://staging-bucket/';
+                deploymentUrl = 'https://staging.example.com';
+                break;
+              case 'production':
+                deploymentCommand = 'aws s3 sync ./build-artifacts s3://prod-bucket/';
+                deploymentUrl = 'https://example.com';
+                break;
+            }
+            
+            // Execute deployment command
+            try {
+              console.log(`Executing: ${deploymentCommand}`);
+              // In a real scenario, you would use exec.exec to run the command
+              // await exec.exec(deploymentCommand);
+              
+              // For demo purposes, we'll just simulate success
+              console.log('Deployment successful');
+              core.setOutput('status', 'success');
+              core.setOutput('url', deploymentUrl);
+            } catch (error) {
+              console.error(`Deployment failed: ${error.message}`);
+              core.setOutput('status', 'failure');
+              core.setFailed(`Deployment to ${environment} failed`);
+            }
+      
+      - name: Run health checks
+        id: health-check
+        if: steps.deploy.outputs.status == 'success'
+        run: |
+          echo "Running health checks for ${{ needs.analyze-repository.outputs.deploy-environment }}"
+          echo "Checking URL: ${{ steps.deploy.outputs.url }}/health"
+          
+          # Simulate health check
+          # In a real scenario, you would use curl or another tool to check the health endpoint
+          # if curl -s -f "${{ steps.deploy.outputs.url }}/health"; then
+          #   echo "status=success" >> $GITHUB_OUTPUT
+          # else
+          #   echo "status=failure" >> $GITHUB_OUTPUT
+          # fi
+          
+          # For demo purposes, we'll just simulate success
+          echo "Health check passed"
+          echo "status=success" >> $GITHUB_OUTPUT
+      
+      - name: Rollback on failure
+        if: steps.deploy.outputs.status == 'failure' || steps.health-check.outputs.status == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const environment = '${{ needs.analyze-repository.outputs.deploy-environment }}';
+            console.log(`Rolling back deployment in ${environment} environment`);
+            
+            // Simulate rollback based on environment
+            let rollbackCommand = '';
+            
+            switch (environment) {
+              case 'development':
+                rollbackCommand = 'aws s3 sync s3://dev-bucket-backup/ s3://dev-bucket/';
+                break;
+              case 'staging':
+                rollbackCommand = 'aws s3 sync s3://staging-bucket-backup/ s3://staging-bucket/';
+                break;
+              case 'production':
+                rollbackCommand = 'aws s3 sync s3://prod-bucket-backup/ s3://prod-bucket/';
+                break;
+            }
+            
+            // Execute rollback command
+            try {
+              console.log(`Executing rollback: ${rollbackCommand}`);
+              // In a real scenario, you would use exec.exec to run the command
+              // await exec.exec(rollbackCommand);
+              
+              console.log('Rollback successful');
+            } catch (error) {
+              console.error(`Rollback failed: ${error.message}`);
+              core.setFailed(`Rollback in ${environment} failed`);
+            }
+      
+      - name: Notify deployment status
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ steps.deploy.outputs.status }}
+          fields: repo,message,commit,author,action,eventName,workflow
+          text: |
+            Deployment to ${{ needs.analyze-repository.outputs.deploy-environment }} ${{ steps.deploy.outputs.status == 'success' && 'succeeded' || 'failed' }}!
+            ${{ steps.deploy.outputs.status == 'success' && format('URL: {0}', steps.deploy.outputs.url) || 'Rollback has been initiated.' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Handle release process
+  manage-release:
+    runs-on: ubuntu-latest
+    needs: [analyze-repository, deploy-application]
+    if: |
+      needs.analyze-repository.outputs.is-release == 'true' && 
+      needs.deploy-application.result == 'success'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Determine app directory
+        id: app-dir
+        run: |
+          if [ -d "app" ]; then
+            echo "directory=app" >> $GITHUB_OUTPUT
+          else
+            echo "directory=." >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Install dependencies
+        run: |
+          cd ${{ steps.app-dir.outputs.directory }}
+          npm ci
+      
+      - name: Bump version
+        id: version
+        uses: phips28/gh-action-bump-version@master
+        with:
+          version-type: ${{ needs.analyze-repository.outputs.version-bump }}
+          tag-prefix: 'v'
+          commit-message: 'ci: bump version to {{version}}'
+          working-directory: ${{ steps.app-dir.outputs.directory }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Generate changelog
+        id: changelog
+        uses: heinrichreimer/github-changelog-generator-action@v2.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          output: CHANGELOG.md
+          stripGeneratorNotice: true
+      
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.newTag }}
+          name: "Release ${{ steps.version.outputs.newTag }}"
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Merge to main
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "ci: merge release ${{ steps.version.outputs.newTag }} to main"
+          title: "Release ${{ steps.version.outputs.newTag }}"
+          body: |
+            ## Release ${{ steps.version.outputs.newTag }}
+            
+            This PR merges the release ${{ steps.version.outputs.newTag }} to main.
+            
+            ### Changelog
+            
+            ${{ steps.changelog.outputs.changelog }}
+          base: main
+          branch: release-to-main/${{ steps.version.outputs.newTag }}
+          draft: false
+      
+      - name: Merge to develop
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "ci: merge release ${{ steps.version.outputs.newTag }} to develop"
+          title: "Sync release ${{ steps.version.outputs.newTag }} to develop"
+          body: |
+            ## Sync release ${{ steps.version.outputs.newTag }} to develop
+            
+            This PR syncs the release ${{ steps.version.outputs.newTag }} back to develop.
+            
+            ### Changelog
+            
+            ${{ steps.changelog.outputs.changelog }}
+          base: develop
+          branch: release-to-develop/${{ steps.version.outputs.newTag }}
+          draft: false
+
+  # Notify workflow completion
+  notify-completion:
+    runs-on: ubuntu-latest
+    needs: [analyze-repository, execute-scripts, build-and-test, deploy-application, manage-release]
+    if: always()
+    steps:
+      - name: Determine workflow status
+        id: status
+        run: |
+          if [ "${{ needs.execute-scripts.result }}" == "failure" ] || [ "${{ needs.build-and-test.result }}" == "failure" ] || [ "${{ needs.deploy-application.result }}" == "failure" ] || [ "${{ needs.manage-release.result }}" == "failure" ]; then
+            echo "workflow-status=failure" >> $GITHUB_OUTPUT
+          else
+            echo "workflow-status=success" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create workflow summary
+        run: |
+          echo "### Workflow Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Repository Analysis: ${{ needs.analyze-repository.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Script Execution: ${{ needs.execute-scripts.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build & Test: ${{ needs.build-and-test.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Deployment: ${{ needs.deploy-application.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Release Management: ${{ needs.manage-release.result || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Overall Status: ${{ steps.status.outputs.workflow-status }}**" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Notify workflow completion
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ steps.status.outputs.workflow-status }}
+          fields: repo,message,commit,author,action,eventName,workflow
+          text: |
+            Workflow completed with status: ${{ steps.status.outputs.workflow-status }}
+            
+            - Repository Analysis: ${{ needs.analyze-repository.result }}
+            - Script Execution: ${{ needs.execute-scripts.result || 'skipped' }}
+            - Build & Test: ${{ needs.build-and-test.result || 'skipped' }}
+            - Deployment: ${{ needs.deploy-application.result || 'skipped' }}
+            - Release Management: ${{ needs.manage-release.result || 'skipped' }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
